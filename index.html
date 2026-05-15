@@ -222,10 +222,11 @@ function handleHasebeNo(){
 }
 
 function servant(){
-    if(data.attendant==="压切长谷部"){
-        return "烛台切光忠";
+    const replaced = ['压切长谷部', '三日月宗近', '加州清光'];
+    if (replaced.includes(data.attendant)) {
+        return '烛台切光忠';
     }
-    return data.attendant || "烛台切光忠";
+    return data.attendant || '烛台切光忠';
 }
 
 let options=[];
