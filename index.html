@@ -131,6 +131,7 @@ let hasebeNoCount = 0;  // 长谷部喜欢选否的次数
 let _hasebeNoAttempt = 0;   // 长谷部喜欢选否的次数（0或1）
 let _showHasebeNoHint = false; // 是否显示“怎么可能？！”半透明文字
 let bgm = null;   // 用于存放坏结局BGM的Audio对象
+let bgmStarted = false;
 function setAbnormal(){
     abnormal++;
     if(abnormal>=1) document.body.classList.add("glitch");
@@ -259,9 +260,18 @@ function selectOption(i){
         show();
         return;
     }
+    // ===== 选非长谷部，开始侵蚀 =====
     options[i] = "压切长谷部";
     setAbnormal();
     eroded = true;
+
+    // ★ 新增：第一次侵蚀时播放音乐
+    if (!bgmStarted) {
+        initBGM();                 // 创建 Audio 对象（如果还没有）
+        bgm.play().catch(e => console.log('播放失败:', e));
+        bgmStarted = true;
+    }
+
     const count = options.filter(o => o==="压切长谷部").length;
     if(count === 4){
         page = 202;
@@ -334,22 +344,17 @@ function typeWriter(el, text, speed, callback) {
     }
     type();
 }
+function initBGM() {
+    if (!bgm) {
+        bgm = new Audio('./kikuo.mp3');
+        bgm.loop = true;
+        bgm.volume = 0.5;
+    }
+}
 /* ---------- 坏结局B 流程（可读中文版 + 全屏大字碾压） ---------- */
 function runEndingB(){
     clearAllEffects();
-    if (bgm) {
-    bgm.pause();
-    bgm = null;
-}
-// 创建音频对象，把 src 换成你自己的音乐文件路径
-bgm = new Audio('./kikuo.mp3');  // 路径可以改
-bgm.loop = true;      // 循环播放
-bgm.volume = 0.5;     // 音量（0~1）
-// 尝试播放（需处理浏览器自动播放限制）
-bgm.play().catch(err => {
-    console.log('自动播放被浏览器阻止，等待用户交互');
-    // 如果不允许自动播放，可以绑定到第一个按钮点击时再播，这里先静默
-});
+  
      document.body.style.background = '#000';
     document.body.style.transition = 'background 2s';
     // 生成掉落“主”字
