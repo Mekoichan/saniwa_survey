@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+<title>审神者问卷</title>
+<style>
+    * {
+        box-sizing: border-box;
+    }
+    body {
+        margin: 0;
+        font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+        background: linear-gradient(135deg, #fdf6f0, #ffeef2);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        padding: 20px;
+        transition: 0.5s;
+        overflow-x: hidden;
+        position: relative;
+    }
+    .container {
+        width: 100%;
+        max-width: 500px;
+        padding: 2rem 1.5rem;
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+        text-align: center;
+        z-index: 10;
+        position: relative;
+        transition: background 0.5s, color 0.5s;
+    }
+    h2, h3 {
+        font-size: clamp(1.2rem, 5vw, 1.8rem);
+        margin: 0.5em 0;
+    }
+    p {
+        font-size: clamp(0.9rem, 3.5vw, 1rem);
+    }
+    button {
+        margin: 0.4rem;
+        padding: 0.7rem 1.2rem;
+        border: none;
+        border-radius: 10px;
+        background: #ffd1dc;
+        cursor: pointer;
+        font-size: clamp(0.9rem, 3.5vw, 1.1rem);
+        transition: background 0.2s;
+        touch-action: manipulation;
+    }
+    button:hover {
+        background: #ff9eb5;
+    }
+    input {
+        width: 80%;
+        padding: 0.7rem;
+        margin: 0.5rem 0;
+        font-size: clamp(0.9rem, 3.5vw, 1.1rem);
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        outline: none;
+    }
+    .red { background: #2a0000 !important; }
+    .glitch { animation: shake 0.15s infinite; }
+
+    @keyframes shake {
+        0% { transform: translate(1px, 0); }
+        50% { transform: translate(-1px, 1px); }
+        100% { transform: translate(1px, -1px); }
+    }
+
+    @keyframes fall {
+        0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; }
+        100% { transform: translateY(110vh) rotate(720deg); opacity: 0.3; }
+    }
+    .character-drop {
+        position: fixed;
+        top: -10%;
+        color: red;
+        font-weight: bold;
+        pointer-events: none;
+        z-index: 5;
+        animation: fall linear infinite;
+    }
+
+    @keyframes petalFall {
+        0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; }
+        100% { transform: translateY(110vh) rotate(360deg); opacity: 0.6; }
+    }
+    .petal {
+        position: fixed;
+        top: -10%;
+        font-size: 24px;
+        pointer-events: none;
+        z-index: 5;
+        animation: petalFall linear infinite;
+    }
+
+    .blink-text {
+        animation: blink 0.8s infinite;
+    }
+    @keyframes blink {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.3; }
+    }
+
+    .overlay {
+        position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background: black;
+        z-index: 1;
+        pointer-events: none;
+        transition: opacity 2s;
+    }
+</style>
+</head>
+<body>
+<div class="container" id="app"></div>
+<script>
+    
+let page = 0;
+let data = {};
+let abnormal = 0;
+let eroded = false;
+let dStep = 0;
+let dTimer = null;
+let hasebeNoCount = 0;  // 长谷部喜欢选否的次数
+let _hasebeNoAttempt = 0;   // 长谷部喜欢选否的次数（0或1）
+let _showHasebeNoHint = false; // 是否显示“怎么可能？！”半透明文字
+let bgm = null;   // 用于存放坏结局BGM的Audio对象
+function setAbnormal(){
+    abnormal++;
+    if(abnormal>=1) document.body.classList.add("glitch");
+    if(abnormal>=2) document.body.classList.add("red");
+}
+
+function render(html){
+    document.getElementById("app").innerHTML = html;
+}
+
+function next(delay=0){
+    setTimeout(()=>{
+        page++;
+        show();
+    },delay);
+}
+
+function scale(k){
+    return [1,2,3,4,5].map(i=>`<button onclick="data.${k}=${i};next()">${i}</button>`).join("");
+}
+
+function yn(k,name){
+    let noAction;
+    if(k === 'l4'){
+        // 长谷部的“否” → 调用特效处理函数
+        noAction = `handleHasebeNo()`;
+    } else {
+        // 其他题目的“否” → 正常保存并下一页
+        noAction = `data.${k}='否';next()`;
+    }
+    return `
+        <button onclick="data.${k}='是'; chooseLike('${name}','是')">是</button>
+        <button onclick="${noAction}">否</button>
+    `;
+}
+
+let clickCount = {};
+function chooseLike(name,val){
+    if(!clickCount[name]) clickCount[name]=0;
+    if(name!=="like_hasebe" && val==="是"){
+        clickCount[name]++;
+        if(clickCount[name] < 3){
+            document.body.style.opacity="0.7";
+            setTimeout(()=>document.body.style.opacity="1",100);
+            return;
+        }else{
+            next();
+        }
+    }else{
+        // 长谷部喜欢选“是” → 重置否计数器
+        if(name === "like_hasebe"){
+            _hasebeNoAttempt = 0;
+            _showHasebeNoHint = false;
+        }
+        next();
+    }
+}
+
+function handleHasebeNo(){
+    // 只有前三个都喜欢选“否”时才触发特效
+    if(data.l1 === '否' && data.l2 === '否' && data.l3 === '否'){
+        if(_hasebeNoAttempt === 0){
+            // 第一次选否 → 抖动 + 显示文字 + 重问
+            _hasebeNoAttempt = 1;
+            _showHasebeNoHint = true;
+            document.body.classList.add("glitch");
+            setTimeout(() => document.body.classList.remove("glitch"), 200);
+            show(); // 重新渲染 case 19
+            // 0.5秒后隐藏“怎么可能？！”
+            setTimeout(() => {
+                _showHasebeNoHint = false;
+                show(); // 再次渲染，文字消失
+            }, 500);
+        } else {
+            // 第二次选否 → 正式通过
+            data.l4 = '否';
+            _hasebeNoAttempt = 0;
+            _showHasebeNoHint = false;
+            next();
+        }
+    } else {
+        // 前三个不全否 → 直接通过
+        data.l4 = '否';
+        _hasebeNoAttempt = 0;
+        _showHasebeNoHint = false;
+        next();
+    }
+}
+
+function servant(){
+    if(data.attendant==="压切长谷部"){
+        return "烛台切光忠";
+    }
+    return data.attendant || "烛台切光忠";
+}
+
+let options=[];
+function initOptions(){
+    options = [
+        servant(),
+        "加州清光",
+        "三日月宗近",
+        "压切长谷部"
+    ];
+    eroded = false;
+}
+
+function renderOptions(){
+    return options.map((o,i)=>`<button onclick="selectOption(${i})">${o}</button>`).join("");
+}
+
+function selectOption(i){
+    const selected = options[i];
+    if(selected === "压切长谷部" && !eroded){
+        if(data.attendant === "压切长谷部" && data.s4 == 5 && data.l4 === "是" &&
+           data.l1 === "否" && data.l2 === "否" && data.l3 === "否"){
+            page = 203;
+        } else {
+            page = 200;
+        }
+        show();
+        return;
+    }
+    if(selected === "压切长谷部" && eroded){
+        page = 202;
+        show();
+        return;
+    }
+    options[i] = "压切长谷部";
+    setAbnormal();
+    eroded = true;
+    const count = options.filter(o => o==="压切长谷部").length;
+    if(count === 4){
+        page = 202;
+        show();
+        return;
+    }
+    if(count === 3){
+        render(`
+            <h3>您最信赖的刀剑男士是？</h3>
+            ${options.map((o,i)=>`<button onclick="finalCheck(${i})">${o}</button>`).join("")}
+        `);
+        return;
+    }
+    render(`<h3>您最信赖的刀剑男士是？</h3>${renderOptions()}`);
+}
+
+function finalCheck(i){
+    const others = options.filter(o => o !== "压切长谷部");
+    if(others.length === 1 && options[i] === others[0]){
+        page = 201;
+    } else {
+        page = 202;
+    }
+    show();
+}
+
+function clearAllEffects(){
+    document.querySelectorAll('.character-drop, .petal, .overlay').forEach(el => el.remove());
+}
+
+function spawnCharacters(){
+    const body = document.body;
+    for(let i=0; i<40; i++){
+        const span = document.createElement('span');
+        span.className = 'character-drop';
+        span.textContent = '主';
+        span.style.left = Math.random() * 100 + '%';
+        span.style.fontSize = (20 + Math.random() * 60) + 'px';
+        span.style.animationDuration = (3 + Math.random() * 5) + 's';
+        span.style.animationDelay = Math.random() * 3 + 's';
+        span.style.opacity = 0.4 + Math.random() * 0.6;
+        body.appendChild(span);
+    }
+}
+
+function spawnPetals(){
+    const body = document.body;
+    const items = ['❤️', '🌸', '💮'];
+    for(let i=0; i<50; i++){
+        const span = document.createElement('span');
+        span.className = 'petal';
+        span.textContent = items[Math.floor(Math.random() * items.length)];
+        span.style.left = Math.random() * 100 + '%';
+        span.style.animationDuration = (4 + Math.random() * 6) + 's';
+        span.style.animationDelay = Math.random() * 4 + 's';
+        body.appendChild(span);
+    }
+}
+function typeWriter(el, text, speed, callback) {
+    let i = 0;
+    el.textContent = '';
+    function type() {
+        if (i < text.length) {
+            el.textContent += text.charAt(i);
+            i++;
+            setTimeout(type, speed);
+        } else {
+            if (callback) callback();
+        }
+    }
+    type();
+}
+/* ---------- 坏结局B 流程（可读中文版 + 全屏大字碾压） ---------- */
+function runEndingB(){
+    clearAllEffects();
+    if (bgm) {
+    bgm.pause();
+    bgm = null;
+}
+// 创建音频对象，把 src 换成你自己的音乐文件路径
+bgm = new Audio('./kikuo.mp3');  // 路径可以改
+bgm.loop = true;      // 循环播放
+bgm.volume = 0.5;     // 音量（0~1）
+// 尝试播放（需处理浏览器自动播放限制）
+bgm.play().catch(err => {
+    console.log('自动播放被浏览器阻止，等待用户交互');
+    // 如果不允许自动播放，可以绑定到第一个按钮点击时再播，这里先静默
+});
+     document.body.style.background = '#000';
+    document.body.style.transition = 'background 2s';
+    // 生成掉落“主”字
+    spawnCharacters();
+    
+    // 先把容器清空，并隐藏（不可见）
+    const container = document.getElementById('app');
+    container.innerHTML = '';
+    container.style.opacity = '0';
+    
+    // 2.5 秒后浮现选择题界面
+    setTimeout(() => {
+        showBPhase1();
+    }, 2500);
+}
+function showBPhase1(){
+    const container = document.getElementById('app');
+    container.style.minHeight = '200px';   // 防止扁框
+    container.style.opacity = '1';         // 直接可见（背景已经黑了）
+    container.innerHTML = `
+        <h3 style="color:red; font-size: clamp(1.2rem, 6vw, 2rem); letter-spacing: 2px;" id="b1-text"></h3>
+        <div id="b1-buttons" style="display:none; margin-top:20px;">
+            <button onclick="showBPhase2()" style="background:#400; color:#c44;">是</button>
+            <button onclick="showBPhase2()" style="background:#400; color:#c44;">是</button>
+            <button onclick="showBPhase2()" style="background:#400; color:#c44;">是</button>
+        </div>
+    `;
+    const textEl = document.getElementById('b1-text');
+    typeWriter(textEl, '主，您最信任的刀剑男士是我长谷部对吧？', 80, () => {
+        document.getElementById('b1-buttons').style.display = 'block';
+    });
+}
+function showBPhase2(){
+    const container = document.getElementById('app');
+    container.innerHTML = `
+        <h2 class="blink-text" style="font-size:${36+Math.random()*30}px; color:red; letter-spacing:${Math.random()*8}px;" id="b2-title"></h2>
+        <p style="color:#ccc; margin-top:20px; text-shadow: 0 0 5px red;" id="b2-sub"></p>
+        <button id="b-continue" style="display:none; margin-top:30px; background:#300; color:#c44;">……</button>
+    `;
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    overlay.style.opacity = '0';
+    document.body.appendChild(overlay);
+
+    const glitchBase = ['主', '丶主', '主丶', '主', '主'];
+    const glitchText = glitchBase[Math.floor(Math.random()*glitchBase.length)] + '…';
+    
+    const titleEl = document.getElementById('b2-title');
+    const subEl = document.getElementById('b2-sub');
+    
+    // 先打标题
+    typeWriter(titleEl, glitchText, 100, () => {
+        // 标题打完再打副标题
+        typeWriter(subEl, '请留在这里', 60, () => {
+            // 副标题打完，显示按钮（并延迟出现）
+            const btn = document.getElementById('b-continue');
+            if(btn) btn.style.display = 'inline-block';
+            // 保留原有遮罩动画
+            setTimeout(() => {
+                overlay.style.opacity = '0.8';
+                if(btn) btn.style.animation = 'shake 0.05s infinite';
+            }, 500); // 给一点缓冲
+        });
+    });
+    
+    // 事件绑定（因为按钮已存在，可以直接绑定，但要确保点击时没有在打字中，不过打字完成后才显示按钮，所以没问题）
+    document.getElementById('app').addEventListener('click', function handler(e){
+        if(e.target.id === 'b-continue'){
+            document.getElementById('app').removeEventListener('click', handler);
+            showBPhase3();
+        }
+    });
+}
+
+function showBPhase3(){
+    document.body.style.background = '#000';
+    const overlay = document.querySelector('.overlay');
+    if(overlay) overlay.style.opacity = '1';
+    const container = document.getElementById('app');
+    container.innerHTML = `
+        <h2 style="color:red; font-size:${28+Math.random()*24}px; letter-spacing:${Math.random()*6}px; text-shadow: 0 0 10px red;" id="b3-text"></h2>
+        <button id="b-trust" style="display:none; margin-top:40px; background:#200; color:#a44;">……</button>
+    `;
+    const textEl = document.getElementById('b3-text');
+    typeWriter(textEl, '来我的神域吧', 80, () => {
+        const btn = document.getElementById('b-trust');
+        if(btn) btn.style.display = 'inline-block';
+    });
+    // 事件绑定
+    document.getElementById('b-trust').addEventListener('click', ()=>{
+        showBPhase4();
+    });
+}
+
+function showBPhase4(){
+    const name = data.name || '审神者';
+    const monologue = `主我终于找到您了请不要再离开我我会永远守护您您是我的全部没有您我无法呼吸留下来永远在这里和我在一起吧主您知道吗好难过我一直以为只要我够忠诚您总会看我的可是您连信任都不肯给我您的心从来不在我这里我每次看着您对别人笑我都快疯了不过没关系真的没关系现在您的名字在我手里您再也跑不掉了您不爱我没关系反正您只能和我在一起我会把您关起来关在谁也找不到的地方您只要活着只要在这里就够了我会一直看着您一直一直您别想逃您这辈子下辈子都只能是我的我终于找到您了请不要再离开我我会永远守护您您是我的全部没有您我无法呼吸留下来永远在这里和我在一起吧`;
+    const container = document.getElementById('app');
+    container.innerHTML = `
+        <p style="color:#f66; font-size:18px; line-height:2; letter-spacing:2px; text-shadow:0 0 8px red;" id="b4-mono"></p>
+        <p style="color:white; margin-top:30px; font-size:24px; font-weight:bold; display:none;" id="b4-name">${name}</p>
+        <button id="b-stay" style="display:none; margin-top:30px; font-size:20px; background:#400; color:#c44;">留下来</button>
+    `;
+    const monoEl = document.getElementById('b4-mono');
+    typeWriter(monoEl, monologue, 30, () => {
+        document.getElementById('b4-name').style.display = 'block';
+        const btn = document.getElementById('b-stay');
+        if(btn) btn.style.display = 'inline-block';
+    });
+    document.getElementById('b-stay').addEventListener('click', ()=>{
+        showBPhase5();
+    });
+    document.querySelectorAll('.character-drop').forEach(el => el.remove());
+    const overlay = document.querySelector('.overlay');
+    if(overlay) overlay.style.opacity = '1';
+}
+
+function showBPhase5(){
+    // 清除之前特效，保留黑暗背景
+    clearAllEffects();
+    document.body.style.background = '#000';
+    // 创建全屏覆盖层
+    const fullOverlay = document.createElement('div');
+    fullOverlay.style.position = 'fixed';
+    fullOverlay.style.top = '0';
+    fullOverlay.style.left = '0';
+    fullOverlay.style.width = '100%';
+    fullOverlay.style.height = '100%';
+    fullOverlay.style.zIndex = '200';
+    fullOverlay.style.background = 'rgba(0,0,0,0.85)';
+    fullOverlay.style.display = 'flex';
+    fullOverlay.style.flexWrap = 'wrap';
+    fullOverlay.style.alignContent = 'flex-start';
+    fullOverlay.style.overflow = 'hidden';
+    // 填充“留下来”大字
+    for(let i=0; i<80; i++){
+        const span = document.createElement('span');
+        span.textContent = '留下来';
+        span.style.color = 'red';
+        span.style.fontSize = (30 + Math.random()*60) + 'px';
+        span.style.fontWeight = 'bold';
+        span.style.opacity = 0.7 + Math.random()*0.3;
+        span.style.transform = `rotate(${Math.random()*20-10}deg)`;
+        span.style.margin = '5px';
+        span.style.textShadow = '0 0 10px red';
+        fullOverlay.appendChild(span);
+    }
+    document.body.appendChild(fullOverlay);
+    // 添加关闭按钮（置于顶层）
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '我……';
+    closeBtn.style.position = 'fixed';
+    closeBtn.style.bottom = '30px';
+    closeBtn.style.left = '50%';
+    closeBtn.style.transform = 'translateX(-50%)';
+    closeBtn.style.zIndex = '300';
+    closeBtn.style.padding = '15px 40px';
+    closeBtn.style.fontSize = '22px';
+    closeBtn.style.background = '#600';
+    closeBtn.style.color = '#fcc';
+    closeBtn.style.border = 'none';
+    closeBtn.style.borderRadius = '8px';
+    closeBtn.style.cursor = 'pointer';
+    closeBtn.addEventListener('click', ()=>{
+        location.reload();
+    });
+    document.body.appendChild(closeBtn);
+}
+
+function showDStep(){
+    const name = data.name || '审神者';
+    let html = '';
+    let buttonHtml = '';
+    switch(dStep){
+        case 0:
+            html = `<h2 style="color:#e91e63;">${name}，我能这么称呼您吗？</h2>`;
+            buttonHtml = `<button onclick="dStep++; showDStep();">……</button>`;
+            break;
+        case 1:
+            html = `<p style="line-height:1.8; font-size:18px;">您真是太不小心了，真名这么宝贵的东西怎么能随便告诉别人呢！</p>`;
+            buttonHtml = `<button onclick="dStep++; showDStep();">……</button>`;
+            break;
+        case 2:
+            html = `<p style="line-height:1.8; font-size:18px;">不小心的话，会被神隐的，主。</p>`;
+            buttonHtml = `<button onclick="dStep++; showDStep();">？！</button>`;
+            break;
+        case 3:
+            html = `<p style="line-height:1.8; font-size:18px;">不过，我不会让那种事情发生的。</p>`;
+            buttonHtml = `<button onclick="dStep++; showDStep();">……</button>`;
+            break;
+        case 4:
+            html = `<p style="line-height:1.8; font-size:18px;">因为${name}选择我了噢。<br>我压切长谷部一定会守护好主人的！</p>`;
+            
+            break;
+    }
+    render(`${html} ${buttonHtml}`);
+}
+
+// 姓名非空验证
+function checkName(){
+    const input = document.getElementById('n');
+    const name = input.value.trim();
+    if(!name){
+        const h3 = document.querySelector('#app h3');
+        if(h3) h3.style.color = 'red';
+        return;
+    }
+    data.name = name;
+    next();
+}
+
+function show(){
+    if(![200,201,202,203].includes(page)){
+        clearAllEffects();
+        document.body.style.background = 'linear-gradient(135deg,#fdf6f0,#ffeef2)';
+        document.body.classList.remove('red','glitch');
+        document.body.style.opacity = '1';
+    }
+
+    switch(page){
+        case 0:
+            render(`
+                <h3>亲爱的审神者</h3>
+                <p style="line-height:1.6; color:#555;">
+                    为了了解各个本丸的运营状况，时之政府诚邀您完成这份简短的问卷。<br>
+                    预计耗时约2分钟，您的回答将帮助我们更好地服务各位审神者。<br>
+                    感谢您的配合。
+                </p>
+                <button onclick="page=1;show()">开始填写</button>
+            `);
+            break;
+
+        case 1:
+            render(`<h3>请输入您的姓名</h3>
+                <input id="n"><button onclick="checkName()">下一步</button>`);
+            break;
+
+        case 2:
+            render(`<h3>请输入您的近侍</h3>
+                <input id="a"><button onclick="data.attendant=a.value;next()">下一步</button>`);
+            break;
+
+        case 3:
+            render(`<h3>请选择您的任职时间</h3>
+                <button onclick="next()">不足1年</button>
+                <button onclick="next()">1-3年</button>
+                <button onclick="next()">3年以上</button>`);
+            break;
+
+        case 4:
+            render(`<h3>您对时之政府的总体满意度</h3>
+            <p style="font-size:12px;color:#888;">1=非常不满，5=非常满意</p>
+            ${scale("sat")}`);
+            break;
+
+        case 5:
+            render(`<h3>您信任时之政府吗？</h3>
+                <button onclick="next()">是</button>
+                <button onclick="next()">否</button>`);
+            break;
+
+        case 6:
+            render(`<h3>您对本年度时政发放的资源福利满意吗？</h3>
+            <p style="font-size:12px;color:#888;">1=非常不满，5=非常满意</p>
+            ${scale("benefit")}`);
+            break;
+        case 7:
+            render(`<h3>您觉得刀剑男士获得新装备的难度如何？</h3>
+                <p style="font-size:12px;color:#888;">1=非常困难，5=非常容易</p>
+                ${scale("equip")}`);
+            break;
+        case 8:
+            render(`<h3>您对远征任务的回报满意吗？</h3>
+            <p style="font-size:12px;color:#888;">1=非常不满，5=非常满意</p>
+            ${scale("expedition")}`);
+            break;
+        case 9:
+            render(`<h3>您对时之政府的整体政策满意吗？</h3>
+            <p style="font-size:12px;color:#888;">1=非常不满，5=非常满意</p>
+            ${scale("policy")}`);
+            break;
+        case 10:
+            render(`<h3>您对本丸的设施建设满意吗？</h3>
+            <p style="font-size:12px;color:#888;">1=非常不满，5=非常满意</p>
+            ${scale("facility")}`);
+            break;
+
+        case 11:
+            render(`
+                <h3>第二部分</h3>
+                <p style="font-size:18px; color:#c44;">对刀剑男士的看法</p>
+                <button onclick="page=12;show()">开始</button>
+            `);
+            break;
+
+        case 12:
+            render(`<h3>您对${servant()}的信任程度</h3>${scale("s1")}`);
+            break;
+        case 13:
+            render(`<h3>您喜欢${servant()}吗？</h3>${yn("l1","like_servant")}`);
+            break;
+        case 14:
+            render(`<h3>您对加州清光的信任程度</h3>${scale("s2")}`);
+            break;
+        case 15:
+            render(`<h3>您喜欢加州清光吗？</h3>${yn("l2","like_kiyo")}`);
+            break;
+        case 16:
+            render(`<h3>您对三日月宗近的信任程度</h3>${scale("s3")}`);
+            break;
+        case 17:
+            render(`<h3>您喜欢三日月宗近吗？</h3>${yn("l3","like_mika")}`);
+            break;
+
+       case 18:
+    if (data.l1 === '否' && data.l2 === '否' && data.l3 === '否' && !data._hmphShown) {
+        data._hmphShown = true;
+        render(`<p style="opacity:0.5; font-style:italic; color:#888;">哼……这些格调特别高的家伙……果然……</p>`);
+        setTimeout(() => show(), 500);
+        break; // ← 这里必须停止，否则后面的 render 会覆盖
+    }
+    render(`<h3>您对压切长谷部的信任程度</h3>${scale("s4")}`);
+    break;
+            
+            
+       case 19: {
+    let extraHTML = '';
+    if (_showHasebeNoHint) {
+        extraHTML = `<p style="opacity:0.25; color:red; margin-top:10px;">怎么可能？！</p>`;
+    }
+    render(`<h3>您喜欢压切长谷部吗？</h3>${yn("l4", "like_hasebe")}${extraHTML}`);
+    break;
+}
+        case 20:
+            initOptions();
+            render(`<h3>您最信赖的刀剑男士是？</h3>${renderOptions()}`);
+            break;
+
+        case 200:
+            clearAllEffects();
+            document.body.classList.remove('red','glitch');
+            document.body.style.background = 'linear-gradient(135deg,#fdf6f0,#ffeef2)';
+            document.body.style.opacity = '1';
+            render(`
+                <h2 style="color:#c44;">谢谢您，主君</h2>
+                <p style="line-height:1.8; margin-top:20px;">
+                    您能毫不犹豫地选择我，是我无上的荣幸。<br>
+                    今后也请让我继续为您效力，不离不弃。
+                </p>
+                <p style="color:#888;">—— 压切长谷部</p>
+                <button onclick="location.reload()" style="margin-top:30px;">重新开始</button>
+            `);
+            break;
+
+        case 201:
+            clearAllEffects();
+            runEndingB();
+            break;
+
+        case 202:
+            clearAllEffects();
+            document.body.classList.remove('red','glitch');
+            document.body.style.background = 'linear-gradient(135deg,#fdf6f0,#ffeef2)';
+            document.body.style.opacity = '1';
+            document.querySelector('.container').style.background = 'white';
+            render(`
+                <h3>问卷提交成功</h3>
+                <p style="line-height:1.6; color:#555;">
+                    感谢您的参与，您的回答将帮助我们改进服务。<br>
+                    祝本丸繁荣昌盛。
+                </p>
+                <p style="color:#aaa;">—— 时之政府</p>
+                <button onclick="location.reload()" style="margin-top:30px;">关闭</button>
+            `);
+            break;
+
+        case 203:
+            clearAllEffects();
+            document.body.classList.remove('red','glitch');
+            document.body.style.background = 'linear-gradient(135deg,#fdf6f0,#ffeef2)';
+            document.body.style.opacity = '1';
+            document.querySelector('.container').style.background = '#fff5f9';
+            spawnPetals();
+            dStep = 0;
+            showDStep();
+            if (dTimer) clearTimeout(dTimer);
+            dTimer = setTimeout(() => {
+                clearAllEffects();
+                document.querySelector('.container').style.background = 'white';
+                render(`
+                    <h3 style="color:#c44;">主！您怎么还在这？快去休息吧。</h3>
+                    <button onclick="location.reload()">关闭</button>
+                `);
+            }, 5 * 60 * 1000);
+            break;
+    }
+}
+
+function startScreen(){
+    render(`
+        <h2>审神者问卷</h2>
+        <p style="font-size:14px;color:#888;margin:20px 0;">
+            本问卷仅供娱乐，不收集任何个人信息。
+        </p>
+        <button onclick="page=0;show()">开始</button>
+    `);
+}
+startScreen();
+</script>
+</body>
+</html>
