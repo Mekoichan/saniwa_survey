@@ -353,6 +353,7 @@ function initBGM() {
 }
 /* ---------- 坏结局B 流程（可读中文版 + 全屏大字碾压） ---------- */
 function runEndingB(){
+   sessionStorage.setItem('badEnding', 'true');
     clearAllEffects();
   
      document.body.style.background = '#000';
@@ -759,7 +760,25 @@ function startScreen(){
         <p style="font-size:14px;color:#888;margin:20px 0;">
             本问卷仅供娱乐，不收集任何个人信息。
         </p>
-        <button onclick="page=0;show()">开始</button>
+        <button onclick="checkstart()">开始</button>
+    `);
+}
+function checkStart(){
+    if (sessionStorage.getItem('badEnding')) {
+        showPostBadEnding();
+    } else {
+        page = 0;
+        show();
+    }
+}
+
+function showPostBadEnding(){
+    document.body.style.background = '#000';
+    document.body.style.transition = 'background 0.5s';
+    render(`
+        <div style="color:red; font-size: clamp(1.5rem, 6vw, 2.5rem); font-weight:bold; line-height:1.8;">
+            这里已经没有您需要填的东西了。<br>您只需要安心地留在我身边就好。
+        </div>
     `);
 }
 startScreen();
