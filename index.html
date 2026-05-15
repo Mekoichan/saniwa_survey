@@ -558,15 +558,40 @@ function showDStep(){
 function checkName(){
     const input = document.getElementById('n');
     const name = input.value.trim();
+    const h3 = document.querySelector('#app h3');
+
+    // 检测特殊名字
+    if(name === '织田信长'){
+        // 标题变红并显示“………？”
+        if(h3) {
+            h3.style.color = 'red';
+            h3.textContent = '…………？';
+        }
+        // 3秒后重置并返回主界面
+        setTimeout(() => {
+            // 重置全局状态
+            page = 0;
+            data = {};
+            abnormal = 0;
+            eroded = false;
+            dStep = 0;
+            if(dTimer) clearTimeout(dTimer);
+            _hasebeNoAttempt = 0;
+            _showHasebeNoHint = false;
+            // 返回开始界面
+            startScreen();
+        }, 3000);
+        return;
+    }
+
+    // 原有非空检测
     if(!name){
-        const h3 = document.querySelector('#app h3');
         if(h3) h3.style.color = 'red';
         return;
     }
     data.name = name;
     next();
 }
-
 function show(){
     if(![200,201,202,203].includes(page)){
         clearAllEffects();
