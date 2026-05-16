@@ -561,16 +561,43 @@ function checkName(){
     const name = input.value.trim();
     const h3 = document.querySelector('#app h3');
 
-    // 检测特殊名字
-    if(name === '织田信长'){
-        // 标题变红并显示“………？”
+    // 特殊名字列表（包括日语可能的写法）
+    const specialNames = [
+        '织田信长', '織田信長', 'おだのぶなが', 'オダノブナガ',
+        '压切长谷部', 'へし切り長谷部', 'へしきりはせべ', 'ヘシキリハセベ',
+        '黑田长政', '黒田長政', 'くろだながまさ', 'クロダナガマサ',
+        '黑田官兵卫', '黒田官兵衛', 'くろだかんべえ', 'クロダカンベエ'
+    ];
+
+    if(specialNames.includes(name)){
+        // 获取当前触发次数
+        let count = parseInt(sessionStorage.getItem('triggerCount') || '0');
+        count++;
+        sessionStorage.setItem('triggerCount', count);
+
+        if(count >= 2){
+            // 第二次触发：全屏红色大字“您究竟要做什么？”3秒后黑屏
+            render(`
+                <div style="color:red; font-size: clamp(2rem, 10vw, 4rem); font-weight:bold; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);">
+                    您究竟要做什么？
+                </div>
+            `);
+            document.body.style.background = '#000';
+            setTimeout(() => {
+                // 彻底黑屏，无法操作，只能关闭页面
+                document.body.innerHTML = '';
+                document.body.style.background = '#000';
+            }, 3000);
+            return;
+        }
+
+        // 第一次触发：标题变红“………？”
         if(h3) {
             h3.style.color = 'red';
             h3.textContent = '…………？';
         }
-        // 3秒后重置并返回主界面
         setTimeout(() => {
-            // 重置全局状态
+            // 重置全局状态但保留计数器
             page = 0;
             data = {};
             abnormal = 0;
@@ -579,7 +606,6 @@ function checkName(){
             if(dTimer) clearTimeout(dTimer);
             _hasebeNoAttempt = 0;
             _showHasebeNoHint = false;
-            // 返回开始界面
             startScreen();
         }, 3000);
         return;
@@ -608,6 +634,7 @@ function show(){
                 <p style="line-height:1.6; color:#555;">
                     为了了解各个本丸的运营状况，时之政府诚邀您完成这份简短的问卷。<br>
                     预计耗时约2分钟，您的回答将帮助我们更好地服务各位审神者。<br>
+                    请各位审神者以自身真实情况作答，请勿填入虚假信息。<br>
                     感谢您的配合。
                 </p>
                 <button onclick="page=1;show()">开始填写</button>
