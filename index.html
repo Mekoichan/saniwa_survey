@@ -120,7 +120,31 @@
 <body>
 <div class="container" id="app"></div>
 <script>
-    
+(function() {
+    if (sessionStorage.getItem('locked') === 'true') {
+        // 隐藏可能残留的容器
+        const app = document.getElementById('app');
+        if(app) app.style.display = 'none';
+
+        document.body.style.margin = '0';
+        document.body.style.background = '#000';
+        document.body.innerHTML = `
+            <div style="color:red; font-size: clamp(2rem, 10vw, 4rem); font-weight:bold;
+                        position:fixed; top:0; left:0; width:100%; height:100%;
+                        display:flex; justify-content:center; align-items:center;">
+                您究竟要做什么？
+            </div>
+        `;
+        // 阻止所有交互
+        document.addEventListener('click', function(e) {
+            e.stopPropagation(); e.preventDefault();
+        }, true);
+        document.addEventListener('touchstart', function(e) {
+            e.stopPropagation(); e.preventDefault();
+        }, true);
+        throw new Error('Session locked');
+    }
+})();   
 let page = 0;
 let data = {};
 let abnormal = 0;
@@ -561,7 +585,7 @@ function checkName(){
     const name = input.value.trim();
     const h3 = document.querySelector('#app h3');
 
-    // 特殊名字列表（包括日语可能的写法）
+    // 特殊名字列表（包含中文、日文汉字及假名写法）
     const specialNames = [
         '织田信长', '織田信長', 'おだのぶなが', 'オダノブナガ',
         '压切长谷部', 'へし切り長谷部', 'へしきりはせべ', 'ヘシキリハセベ',
@@ -569,35 +593,47 @@ function checkName(){
         '黑田官兵卫', '黒田官兵衛', 'くろだかんべえ', 'クロダカンベエ'
     ];
 
+    // 检查是否为特殊名字
     if(specialNames.includes(name)){
-        // 获取当前触发次数
+        // 读取并更新触发计数（使用 sessionStorage 保留会话内的次数）
         let count = parseInt(sessionStorage.getItem('triggerCount') || '0');
         count++;
         sessionStorage.setItem('triggerCount', count);
 
-        if(count >= 2){
-            // 第二次触发：全屏红色大字“您究竟要做什么？”3秒后黑屏
-            render(`
-                <div style="color:red; font-size: clamp(2rem, 10vw, 4rem); font-weight:bold; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);">
-                    您究竟要做什么？
-                </div>
-            `);
-            document.body.style.background = '#000';
-            setTimeout(() => {
-                // 彻底黑屏，无法操作，只能关闭页面
-                document.body.innerHTML = '';
-                document.body.style.background = '#000';
-            }, 3000);
-            return;
-        }
+        // 第二次触发 → 全屏红色警告，3秒后黑屏
+       if(count >= 2){
+    // 设置封锁标记
+    sessionStorage.setItem('locked', 'true');
 
-        // 第一次触发：标题变红“………？”
+    // 隐藏白色容器
+    const container = document.getElementById('app');
+    if(container) container.style.display = 'none';
+
+    // 全屏覆盖黑底红字
+    document.body.style.margin = '0';
+    document.body.style.background = '#000';
+    document.body.innerHTML = `
+        <div style="color:red; font-size: clamp(2rem, 10vw, 4rem); font-weight:bold;
+                    position:fixed; top:0; left:0; width:100%; height:100%;
+                    display:flex; justify-content:center; align-items:center;">
+            您究竟要做什么？
+        </div>
+    `;
+
+    // 3秒后自动刷新（刷新后会进入锁定页，依然是全屏）
+    setTimeout(() => {
+        location.reload();
+    }, 3000);
+    return;
+}
+
+        // 第一次触发 → 标题变红显示“………？”，3秒后返回开始界面
         if(h3) {
             h3.style.color = 'red';
             h3.textContent = '…………？';
         }
         setTimeout(() => {
-            // 重置全局状态但保留计数器
+            // 重置问卷状态，但不清理 sessionStorage 计数
             page = 0;
             data = {};
             abnormal = 0;
@@ -611,7 +647,7 @@ function checkName(){
         return;
     }
 
-    // 原有非空检测
+    // 原有的非空验证
     if(!name){
         if(h3) h3.style.color = 'red';
         return;
